@@ -8,7 +8,7 @@ import { User } from "../models/user.models.js";
  export const verifyJWT = asyncHandlers(async (req , _ , next) => {
     try {
         const token= req.cookies?.accessToken || 
-        req.headers("Authorization")?.replace("Bearer ","")
+        req.headers["Authorization"]?.replace("Bearer ","")
         if(!token){
             throw new ApiErrors("Unauthorized access, token missing",401);
         }
@@ -26,3 +26,4 @@ import { User } from "../models/user.models.js";
         
     }
  });
+//check karo user login hai ya nahi
