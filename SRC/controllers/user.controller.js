@@ -4,6 +4,7 @@ import { User } from "../models/user.models.js";
 import { upLoadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
+import { upload } from "../middlewares/multer.middleware.js";
 
 const registerUser = asyncHandlers(async (req, res) => {
     console.log("Inside registerUser — req.body:", req.body);
@@ -192,11 +193,107 @@ const refreshAccesstoken = asyncHandlers(async (req, res)=>{
      }
 })
 
+const changeCurrentPassword = asyncHandlers(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  // 1️⃣ validation
+  if (!currentPassword || !newPassword) {
+    throw new ApiErrors("Both fields are required", 400);
+  }
+
+  // 2️⃣ user find
+  const user = await User.findById(req.user?._id);
+
+  if (!user) {
+    throw new ApiErrors("User not found", 404);
+  }
+
+  // 3️⃣ current password check
+  const isPasswordCorrect = await user.isPasswordCorrect(currentPassword);
+
+  if (!isPasswordCorrect) {
+    throw new ApiErrors("Current password is incorrect", 401);
+  }
+
+  // 4️⃣ same password check
+  if (currentPassword === newPassword) {
+    throw new ApiErrors("New password cannot be same as old password", 400);
+  }
+
+  // 5️⃣ update password
+  user.password = newPassword;
+
+  // ✅ important (no validateBeforeSave false)
+  await user.save();
+
+  return res.status(200).json(
+    new ApiResponse(200, {}, "Password changed successfully")
+  );
+});
+
+const getCurrentUser = asyncHandlers(async (req, res) => {
+  return res.status(200).json(
+    new ApiResponse(200, req.user, "Current user fetched successfully")
+  );
+
+});
+
+const updateAccountDetails = asyncHandlers(async (req, res) => {
+  const { fullName, email, username } = req.body;
+
+  if (!fullName && !email && !username) {
+    throw new ApiErrors("At least one field is required to update", 400);
+  }
+
+  // dynamic update object
+  const updateFields = {};
+
+  if (fullName) updateFields.fullName = fullName.trim();
+  if (email) updateFields.email = email.trim().toLowerCase();
+  if (username) updateFields.username = username.trim().toLowerCase();
+
+  const user = await User.findByIdAndUpdate(
+    req.user._id,
+    { $set: updateFields },
+    { new: true }
+  ).select("-password -refreshToken");
+
+  return res.status(200).json(
+    new ApiResponse(200, user, "Account details updated successfully")
+  );
+});
+
+const updateUserAvatar = asyncHandlers(async (req, res) =>{
+  const avatarLocalPath = req.file?.path;
+
+  if (!avatarLocalPath) {
+    throw new ApiErrors("Avatar image is required", 400);
+  }
+
+  const avatar = await upLoadOnCloudinary(avatarLocalPath);
+  if (!avatar || !avatar.url) {
+    throw new ApiErrors("Error uploading avatar", 500);
+  }
+ const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    { avatar: avatar.url },
+    { new: true }
+  ).select("-password ");
+  return res.status(200).json(
+    new ApiResponse(200, user, "Avatar updated successfully")
+  );
+})
+
 
 export 
 {
   registerUser,
   loginUser,
   logoutUser,
-  refreshAccesstoken
+  refreshAccesstoken,
+  changeCurrentPassword,
+  getCurrentUser,
+  updateAccountDetails,
+  updateUserAvatar
+
 };
