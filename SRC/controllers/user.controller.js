@@ -409,13 +409,20 @@ const getUserChannelProfile = asyncHandlers(async (req, res) => {
     },
     {
       $project: {
-        fullName: 1,
+        name: "$fullName",
         username: 1,
         subscribersCount: 1,
+        isPopular: {
+          $cond: {
+            if: { $gt: ["$subscribersCount", 1000] },
+            then: true,
+            else: false,
+          },
+        },
         channelSubscribedToCount: 1,
         isSubscribed: 1,
-        avatar: 1,
-        coverimage: 1,
+        avatar: { $ifNull: ["$avatar", "default.png"] },
+        coverimage: { $ifNull: ["$coverimage", "default.png"] },
         email: 1,
       },
     },
@@ -429,6 +436,60 @@ const getUserChannelProfile = asyncHandlers(async (req, res) => {
     .status(200)
     .json(
       new ApiResponse(200, channel[0], "Channel profile fetched successfully"),
+    );
+});
+
+const getWatchHistory = asyncHandlers(async (req, res) => {
+  const userId = req.user._id;
+
+  const user = await User.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(userId),
+      },
+    },
+    {
+      $lookup: {
+        from: "videos",
+        localField: "watchHistory",
+        foreignField: "_id",
+        as: "watchHistoryDetails",
+        pipeline: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "owner",
+              foreignField: "_id",
+              as: "ownerDetails",
+              pipeline: [
+                {
+                  $project: {
+                    fullName: 1,
+                    username: 1,
+                    avatar: 1,
+                  },
+                },
+              ],
+            },
+          },
+          {
+            $addFields: {
+              owner: { $first: "$ownerDetails" },
+            },
+          },
+        ],
+      },
+    },
+  ]);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        user[0]?.watchHistoryDetails || [],
+        "User watch history fetched successfully",
+      ),
     );
 });
 
